@@ -68,6 +68,7 @@
         this.board = [];
         this.current = null;
         this.next = null;
+        this.bag = [];
         this.score = 0;
         this.lines = 0;
         this.level = 1;
@@ -87,9 +88,26 @@
         }
     };
 
+    Game.prototype.fillBag = function () {
+        this.bag = [0, 1, 2, 3, 4, 5, 6];
+        for (var i = this.bag.length - 1; i > 0; i--) {
+            var j = Math.floor(Math.random() * (i + 1));
+            var tmp = this.bag[i];
+            this.bag[i] = this.bag[j];
+            this.bag[j] = tmp;
+        }
+    };
+
+    Game.prototype.nextFromBag = function () {
+        if (this.bag.length === 0) {
+            this.fillBag();
+        }
+        return this.bag.pop();
+    };
+
     Game.prototype.spawnPiece = function () {
-        this.current = this.next || new Piece(Math.floor(Math.random() * 7));
-        this.next = new Piece(Math.floor(Math.random() * 7));
+        this.current = this.next || new Piece(this.nextFromBag());
+        this.next = new Piece(this.nextFromBag());
     };
 
     Game.prototype.valid = function (piece) {
@@ -316,6 +334,7 @@
         this.paused = false;
         this.current = null;
         this.next = null;
+        this.bag = [];
         this.updateUI();
         this.spawnPiece();
         this.draw();
