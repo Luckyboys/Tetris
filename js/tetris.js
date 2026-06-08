@@ -107,6 +107,10 @@
         this.paused = false;
         this.timer = null;
         this.dropInterval = 800;
+        this.combo = -1;
+        this.backToBack = false;
+        this.lastMoveWasRotate = false;
+        this.lastRotateUsedKick = false;
 
         this.sound = (typeof SoundEngine === "function") ? new SoundEngine() : null;
 
@@ -161,8 +165,33 @@
         return true;
     };
 
+    Game.prototype._cellBlocked = function (bx, by) {
+        if (bx < 0 || bx >= COLS || by >= ROWS) return true;
+        if (by < 0) return false;
+        return this.board[by][bx] !== 0;
+    };
+
+    Game.prototype._detectTSpin = function () {
+        var p = this.current;
+        if (p.type !== 2) return 0;
+        if (!this.lastMoveWasRotate) return 0;
+        var corners = [
+            [p.x + 0, p.y + 0],
+            [p.x + 2, p.y + 0],
+            [p.x + 0, p.y + 2],
+            [p.x + 2, p.y + 2]
+        ];
+        var occupied = 0;
+        for (var i = 0; i < corners.length; i++) {
+            if (this._cellBlocked(corners[i][0], corners[i][1])) occupied++;
+        }
+        if (occupied < 3) return 0;
+        return this.lastRotateUsedKick ? 1 : 2;
+    };
+
     Game.prototype.lockPiece = function () {
         var p = this.current;
+        var tSpinKind = this._detectTSpin();
         for (var y = 0; y < p.shape.length; y++) {
             for (var x = 0; x < p.shape[y].length; x++) {
                 if (!p.shape[y][x]) continue;
@@ -175,14 +204,17 @@
                 this.board[by][bx] = p.type + 1;
             }
         }
-        this.clearLines();
+        this.clearLines(tSpinKind);
+        this.lastMoveWasRotate = false;
+        this.lastRotateUsedKick = false;
         this.spawnPiece();
         if (!this.valid(this.current)) {
             this.gameOver();
         }
     };
 
-    Game.prototype.clearLines = function () {
+    Game.prototype.clearLines = function (tSpinKind) {
+        tSpinKind = tSpinKind || 0;
         var cleared = 0;
         var clearedRows = [];
         for (var y = ROWS - 1; y >= 0; y--) {
@@ -202,11 +234,50 @@
                 y++;
             }
         }
+
+        var basePoints = 0;
+        if (tSpinKind === 2) {
+            var tSpinFull = [400, 800, 1200, 1600];
+            basePoints = tSpinFull[cleared];
+        } else if (tSpinKind === 1) {
+            var tSpinMini = [100, 200, 400, 400];
+            basePoints = tSpinMini[cleared];
+        } else if (cleared > 0) {
+            var lineScore = [0, 100, 300, 500, 800];
+            basePoints = lineScore[cleared];
+        }
+
+        var isDifficult = (cleared === 4) || (tSpinKind > 0 && cleared > 0);
+        var b2bBonus = 0;
+        if (isDifficult && this.backToBack && basePoints > 0) {
+            b2bBonus = Math.floor(basePoints * 0.5);
+        }
+
+        if (cleared > 0) {
+            this.combo += 1;
+        } else {
+            this.combo = -1;
+        }
+        var comboBonus = 0;
+        if (this.combo >= 1) {
+            comboBonus = 50 * this.combo * this.level;
+        }
+
+        if (basePoints > 0 || comboBonus > 0) {
+            this.score += basePoints * this.level + b2bBonus * this.level + comboBonus;
+        }
+
+        if (cleared > 0) {
+            if (isDifficult) {
+                this.backToBack = true;
+            } else {
+                this.backToBack = false;
+            }
+        }
+
         if (cleared > 0) {
             this.startParticleAnimation();
             this.startShake(cleared * 3, 150 + cleared * 80);
-            var points = [0, 100, 300, 500, 800];
-            this.score += points[cleared] * this.level;
             this.lines += cleared;
             var prevLevel = this.level;
             this.level = Math.floor(this.lines / 10) + 1;
@@ -229,6 +300,8 @@
                 var self = this;
                 setTimeout(function () { self._sfx("levelUp"); }, 400);
             }
+        } else if (basePoints > 0) {
+            this.updateUI();
         }
     };
 
@@ -284,6 +357,7 @@
         if (!this.valid(this.current)) {
             this.current.x++;
         } else {
+            this.lastMoveWasRotate = false;
             this._sfx("move");
         }
     };
@@ -293,16 +367,21 @@
         if (!this.valid(this.current)) {
             this.current.x--;
         } else {
+            this.lastMoveWasRotate = false;
             this._sfx("move");
         }
     };
 
-    Game.prototype.moveDown = function () {
+    Game.prototype.moveDown = function (isSoftDrop) {
         this.current.y++;
         if (!this.valid(this.current)) {
             this.current.y--;
             this._sfx("land");
             this.lockPiece();
+        } else if (isSoftDrop) {
+            this.score += 1;
+            this.lastMoveWasRotate = false;
+            this.updateUI();
         }
     };
 
@@ -310,8 +389,10 @@
         var rotated = rotateCW(this.current.shape);
         var old = this.current.shape;
         this.current.shape = rotated;
+        var usedKick = false;
         if (!this.valid(this.current)) {
             this.current.x--;
+            usedKick = true;
             if (!this.valid(this.current)) {
                 this.current.x += 2;
                 if (!this.valid(this.current)) {
@@ -321,14 +402,22 @@
                 }
             }
         }
+        this.lastMoveWasRotate = true;
+        this.lastRotateUsedKick = usedKick;
         this._sfx("rotate");
     };
 
     Game.prototype.hardDrop = function () {
+        var dropDistance = 0;
         while (this.valid(this.current)) {
             this.current.y++;
+            dropDistance++;
         }
         this.current.y--;
+        if (dropDistance > 0) dropDistance--;
+        this.score += dropDistance * 2;
+        this.lastMoveWasRotate = false;
+        this.updateUI();
         this._sfx("hardDrop");
         this.lockPiece();
     };
@@ -566,6 +655,10 @@
         this.lines = 0;
         this.level = 1;
         this.dropInterval = 800;
+        this.combo = -1;
+        this.backToBack = false;
+        this.lastMoveWasRotate = false;
+        this.lastRotateUsedKick = false;
         this.running = true;
         this.paused = false;
         this.current = null;
@@ -645,7 +738,7 @@
                 case "ArrowDown":
                 case "s":
                     e.preventDefault();
-                    self.moveDown();
+                    self.moveDown(true);
                     break;
                 case "ArrowUp":
                 case "w":
@@ -697,7 +790,7 @@
                 this.moveRight();
                 break;
             case "down":
-                this.moveDown();
+                this.moveDown(true);
                 this.updateTimer();
                 break;
             case "rotate":
