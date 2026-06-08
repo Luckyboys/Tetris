@@ -79,16 +79,22 @@
         return this.life > 0;
     };
 
-    function Game(boardCanvas, nextCanvas) {
+    function Game(boardCanvas, nextCanvas, nextCanvasDesktop) {
         this.boardCanvas = boardCanvas;
         this.ctx = boardCanvas.getContext("2d");
         this.nextCanvas = nextCanvas;
         this.nextCtx = nextCanvas.getContext("2d");
+        this.nextCanvasDesktop = nextCanvasDesktop;
+        this.nextCtxDesktop = nextCanvasDesktop ? nextCanvasDesktop.getContext("2d") : null;
 
         boardCanvas.width = COLS * CELL;
         boardCanvas.height = ROWS * CELL;
         nextCanvas.width = 4 * CELL;
         nextCanvas.height = 4 * CELL;
+        if (nextCanvasDesktop) {
+            nextCanvasDesktop.width = 4 * CELL;
+            nextCanvasDesktop.height = 4 * CELL;
+        }
 
         this.board = [];
         this.current = null;
@@ -430,23 +436,59 @@
     };
 
     Game.prototype.drawNext = function () {
+        var W = 4 * CELL;
+        var H = 4 * CELL;
         var ctx = this.nextCtx;
+        ctx.clearRect(0, 0, W, H);
         ctx.fillStyle = "#0a0a1a";
-        ctx.fillRect(0, 0, 4 * CELL, 4 * CELL);
+        ctx.fillRect(0, 0, W, H);
+
+        if (this.nextCtxDesktop) {
+            this.nextCtxDesktop.clearRect(0, 0, W, H);
+            this.nextCtxDesktop.fillStyle = "#0a0a1a";
+            this.nextCtxDesktop.fillRect(0, 0, W, H);
+        }
 
         if (!this.next) return;
         var shape = this.next.shape;
         var colorObj = this.next.colorObj;
         var size = shape.length;
-        var offsetX = Math.floor((4 - size) / 2);
-        var offsetY = Math.floor((4 - size) / 2);
 
-        for (var y = 0; y < size; y++) {
-            for (var x = 0; x < size; x++) {
-                if (shape[y][x]) {
-                    this.drawCell(ctx, offsetX + x, offsetY + y, colorObj);
+        var minX = size, minY = size, maxX = -1, maxY = -1;
+        for (var yy = 0; yy < size; yy++) {
+            for (var xx = 0; xx < size; xx++) {
+                if (shape[yy][xx]) {
+                    if (xx < minX) minX = xx;
+                    if (yy < minY) minY = yy;
+                    if (xx > maxX) maxX = xx;
+                    if (yy > maxY) maxY = yy;
                 }
             }
+        }
+        if (maxX < 0) return;
+
+        var pieceW = (maxX - minX + 1) * CELL;
+        var pieceH = (maxY - minY + 1) * CELL;
+        var pxOffset = (W - pieceW) / 2 - minX * CELL;
+        var pyOffset = (H - pieceH) / 2 - minY * CELL;
+
+        var self = this;
+        function drawTo(targetCtx) {
+            targetCtx.save();
+            targetCtx.translate(pxOffset, pyOffset);
+            for (var y = 0; y < size; y++) {
+                for (var x = 0; x < size; x++) {
+                    if (shape[y][x]) {
+                        self.drawCell(targetCtx, x, y, colorObj);
+                    }
+                }
+            }
+            targetCtx.restore();
+        }
+
+        drawTo(ctx);
+        if (this.nextCtxDesktop) {
+            drawTo(this.nextCtxDesktop);
         }
     };
 
@@ -456,9 +498,17 @@
     };
 
     Game.prototype.updateUI = function () {
-        document.getElementById("score").textContent = this.score;
-        document.getElementById("lines").textContent = this.lines;
-        document.getElementById("level").textContent = this.level;
+        var score = this.score;
+        var lines = this.lines;
+        var level = this.level;
+        var ids = [
+            ["score", score], ["lines", lines], ["level", level],
+            ["scoreD", score], ["linesD", lines], ["levelD", level]
+        ];
+        for (var i = 0; i < ids.length; i++) {
+            var el = document.getElementById(ids[i][0]);
+            if (el) el.textContent = ids[i][1];
+        }
     };
 
     Game.prototype.tick = function () {
@@ -494,6 +544,7 @@
         this.draw();
         this.updateTimer();
         document.getElementById("startBtn").textContent = "重新开始";
+        document.getElementById("startBtnD").textContent = "重新开始";
     };
 
     Game.prototype.pauseToggle = function () {
@@ -562,6 +613,51 @@
                 self.updateTimer();
             }
         });
+
+        var btns = document.querySelectorAll(".touch-btn");
+        for (var k = 0; k < btns.length; k++) {
+            btns[k].addEventListener("touchstart", function (e) {
+                e.preventDefault();
+                self.handleTouchAction(this.dataset.action);
+            });
+            btns[k].addEventListener("mousedown", function (e) {
+                e.preventDefault();
+                self.handleTouchAction(this.dataset.action);
+            });
+        }
+    };
+
+    Game.prototype.handleTouchAction = function (action) {
+        if (action === "pause") {
+            this.pauseToggle();
+            return;
+        }
+        if (!this.running) {
+            if (action === "hardDrop") {
+                this.restart();
+            }
+            return;
+        }
+        if (this.paused) return;
+        switch (action) {
+            case "left":
+                this.moveLeft();
+                break;
+            case "right":
+                this.moveRight();
+                break;
+            case "down":
+                this.moveDown();
+                this.updateTimer();
+                break;
+            case "rotate":
+                this.rotate();
+                break;
+            case "hardDrop":
+                this.hardDrop();
+                break;
+        }
+        this.draw();
     };
 
     Game.prototype.restart = function () {
@@ -571,9 +667,13 @@
 
     var boardCanvas = document.getElementById("boardCanvas");
     var nextCanvas = document.getElementById("nextCanvas");
-    var game = new Game(boardCanvas, nextCanvas);
+    var nextCanvasDesktop = document.getElementById("nextCanvasDesktop");
+    var game = new Game(boardCanvas, nextCanvas, nextCanvasDesktop);
 
     document.getElementById("startBtn").addEventListener("click", function () {
+        game.start();
+    });
+    document.getElementById("startBtnD").addEventListener("click", function () {
         game.start();
     });
     document.getElementById("restartBtn").addEventListener("click", function () {

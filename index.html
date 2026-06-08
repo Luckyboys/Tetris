@@ -2,32 +2,54 @@
 <html lang="zh-CN">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
     <title>俄罗斯方块</title>
     <link rel="stylesheet" href="css/style.css">
 </head>
 <body>
-    <div class="container">
-        <div class="game-area">
+    <div class="wrapper">
+        <div class="mobile-header">
+            <div class="mobile-next">
+                <canvas id="nextCanvas"></canvas>
+            </div>
+            <div class="mobile-scores">
+                <div class="mobile-score-item">
+                    <span class="mobile-label">得分</span>
+                    <span class="mobile-value" id="score">0</span>
+                </div>
+                <div class="mobile-score-item">
+                    <span class="mobile-label">行数</span>
+                    <span class="mobile-value" id="lines">0</span>
+                </div>
+                <div class="mobile-score-item">
+                    <span class="mobile-label">等级</span>
+                    <span class="mobile-value" id="level">1</span>
+                </div>
+            </div>
+            <button id="startBtn" class="btn">开始</button>
+        </div>
+
+        <div class="game-board">
             <canvas id="boardCanvas"></canvas>
         </div>
-        <div class="side-panel">
+
+        <div class="desktop-side-panel">
             <div class="next-piece">
                 <h3>下一个</h3>
-                <canvas id="nextCanvas"></canvas>
+                <canvas id="nextCanvasDesktop"></canvas>
             </div>
             <div class="score-panel">
                 <div class="score">
                     <span>得分</span>
-                    <span id="score">0</span>
+                    <span id="scoreD">0</span>
                 </div>
                 <div class="lines">
                     <span>消除行数</span>
-                    <span id="lines">0</span>
+                    <span id="linesD">0</span>
                 </div>
                 <div class="level">
                     <span>等级</span>
-                    <span id="level">1</span>
+                    <span id="levelD">1</span>
                 </div>
             </div>
             <div class="controls-info">
@@ -38,9 +60,23 @@
                 <p>空格 硬降</p>
                 <p>P 暂停/继续</p>
             </div>
-            <button id="startBtn" class="btn">开始游戏</button>
+            <button id="startBtnD" class="btn">开始游戏</button>
         </div>
     </div>
+
+    <div class="touch-controls">
+        <button class="touch-btn touch-btn-rotate" data-action="rotate">↻</button>
+        <div class="touch-dpad">
+            <button class="touch-btn" data-action="left">◀</button>
+            <button class="touch-btn" data-action="down">▼</button>
+            <button class="touch-btn" data-action="right">▶</button>
+        </div>
+        <div class="touch-side">
+            <button class="touch-btn touch-btn-drop" data-action="hardDrop">⏬</button>
+            <button class="touch-btn touch-btn-pause" data-action="pause">⏸</button>
+        </div>
+    </div>
+
     <div id="gameOver" class="overlay hidden">
         <div class="overlay-content">
             <h2>游戏结束</h2>
