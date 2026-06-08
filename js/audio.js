@@ -1,0 +1,365 @@
+(function (global) {
+    function SoundEngine() {
+        this.ctx = null;
+        this.masterGain = null;
+        this.sfxGain = null;
+        this.bgmGain = null;
+        this.muted = false;
+        this.bgmVolume = 0.18;
+        this.sfxVolume = 0.35;
+        this.bgmTimer = null;
+        this.bgmStep = 0;
+        this.bgmPlaying = false;
+        this._bgmActiveNotes = [];
+    }
+
+    SoundEngine.prototype._ensureCtx = function () {
+        if (this.ctx) {
+            if (this.ctx.state === "suspended") {
+                this.ctx.resume();
+            }
+            return;
+        }
+        var Ctor = global.AudioContext || global.webkitAudioContext;
+        if (!Ctor) return;
+        this.ctx = new Ctor();
+        this.masterGain = this.ctx.createGain();
+        this.masterGain.gain.value = this.muted ? 0 : 1;
+        this.masterGain.connect(this.ctx.destination);
+
+        this.sfxGain = this.ctx.createGain();
+        this.sfxGain.gain.value = this.sfxVolume;
+        this.sfxGain.connect(this.masterGain);
+
+        this.bgmGain = this.ctx.createGain();
+        this.bgmGain.gain.value = this.bgmVolume;
+        this.bgmGain.connect(this.masterGain);
+    };
+
+    SoundEngine.prototype._envTone = function (opts) {
+        if (!this.ctx) return;
+        var ctx = this.ctx;
+        var now = ctx.currentTime + (opts.delay || 0);
+        var osc = ctx.createOscillator();
+        var gain = ctx.createGain();
+        osc.type = opts.type || "square";
+        osc.frequency.setValueAtTime(opts.startFreq, now);
+        if (opts.endFreq !== undefined) {
+            osc.frequency.exponentialRampToValueAtTime(
+                Math.max(0.0001, opts.endFreq),
+                now + opts.duration
+            );
+        }
+        var peak = opts.peak !== undefined ? opts.peak : 0.4;
+        gain.gain.setValueAtTime(0.0001, now);
+        gain.gain.exponentialRampToValueAtTime(peak, now + 0.005);
+        gain.gain.exponentialRampToValueAtTime(0.0001, now + opts.duration);
+
+        osc.connect(gain);
+        gain.connect(opts.target || this.sfxGain);
+        osc.start(now);
+        osc.stop(now + opts.duration + 0.02);
+    };
+
+    SoundEngine.prototype._noiseBurst = function (opts) {
+        if (!this.ctx) return;
+        var ctx = this.ctx;
+        var now = ctx.currentTime + (opts.delay || 0);
+        var duration = opts.duration || 0.18;
+        var bufferSize = Math.floor(ctx.sampleRate * duration);
+        var buffer = ctx.createBuffer(1, bufferSize, ctx.sampleRate);
+        var data = buffer.getChannelData(0);
+        for (var i = 0; i < bufferSize; i++) {
+            data[i] = (Math.random() * 2 - 1) * (1 - i / bufferSize);
+        }
+        var source = ctx.createBufferSource();
+        source.buffer = buffer;
+        var filter = ctx.createBiquadFilter();
+        filter.type = opts.filterType || "bandpass";
+        filter.frequency.value = opts.filterFreq || 1200;
+        filter.Q.value = opts.filterQ || 1.2;
+        var gain = ctx.createGain();
+        var peak = opts.peak !== undefined ? opts.peak : 0.3;
+        gain.gain.setValueAtTime(peak, now);
+        gain.gain.exponentialRampToValueAtTime(0.0001, now + duration);
+        source.connect(filter);
+        filter.connect(gain);
+        gain.connect(opts.target || this.sfxGain);
+        source.start(now);
+        source.stop(now + duration + 0.02);
+    };
+
+    SoundEngine.prototype.play = function (name) {
+        this._ensureCtx();
+        if (!this.ctx) return;
+        switch (name) {
+            case "move":
+                this._envTone({ type: "square", startFreq: 320, endFreq: 280, duration: 0.05, peak: 0.18 });
+                break;
+            case "rotate":
+                this._envTone({ type: "triangle", startFreq: 480, endFreq: 720, duration: 0.08, peak: 0.22 });
+                break;
+            case "land":
+                this._envTone({ type: "square", startFreq: 180, endFreq: 90, duration: 0.12, peak: 0.32 });
+                this._noiseBurst({ duration: 0.08, filterType: "lowpass", filterFreq: 600, peak: 0.18 });
+                break;
+            case "hardDrop":
+                this._envTone({ type: "sawtooth", startFreq: 600, endFreq: 80, duration: 0.18, peak: 0.35 });
+                this._noiseBurst({ duration: 0.16, filterType: "lowpass", filterFreq: 900, peak: 0.28 });
+                break;
+            case "clear1":
+                this._envTone({ type: "square", startFreq: 660, endFreq: 990, duration: 0.18, peak: 0.32 });
+                this._envTone({ type: "triangle", startFreq: 880, endFreq: 1320, duration: 0.18, peak: 0.22, delay: 0.02 });
+                break;
+            case "clear2":
+                this._envTone({ type: "square", startFreq: 660, endFreq: 990, duration: 0.22, peak: 0.32 });
+                this._envTone({ type: "triangle", startFreq: 880, endFreq: 1320, duration: 0.22, peak: 0.22, delay: 0.04 });
+                this._envTone({ type: "square", startFreq: 1180, endFreq: 1580, duration: 0.18, peak: 0.18, delay: 0.1 });
+                break;
+            case "clear3":
+                this._envTone({ type: "sawtooth", startFreq: 520, endFreq: 1040, duration: 0.28, peak: 0.32 });
+                this._envTone({ type: "square", startFreq: 880, endFreq: 1320, duration: 0.24, peak: 0.26, delay: 0.05 });
+                this._envTone({ type: "triangle", startFreq: 1320, endFreq: 1760, duration: 0.22, peak: 0.22, delay: 0.12 });
+                break;
+            case "tetris":
+                var notes = [523, 659, 784, 1047, 1319, 1568];
+                for (var i = 0; i < notes.length; i++) {
+                    this._envTone({
+                        type: "square",
+                        startFreq: notes[i],
+                        endFreq: notes[i] * 1.05,
+                        duration: 0.18,
+                        peak: 0.3,
+                        delay: i * 0.06
+                    });
+                    this._envTone({
+                        type: "triangle",
+                        startFreq: notes[i] * 2,
+                        endFreq: notes[i] * 2.05,
+                        duration: 0.16,
+                        peak: 0.18,
+                        delay: i * 0.06
+                    });
+                }
+                this._noiseBurst({ duration: 0.4, filterType: "highpass", filterFreq: 2000, peak: 0.12, delay: 0.05 });
+                break;
+            case "levelUp":
+                var lu = [523, 659, 784, 1047];
+                for (var j = 0; j < lu.length; j++) {
+                    this._envTone({
+                        type: "triangle",
+                        startFreq: lu[j],
+                        endFreq: lu[j] * 1.02,
+                        duration: 0.14,
+                        peak: 0.28,
+                        delay: j * 0.07
+                    });
+                }
+                break;
+            case "pause":
+                this._envTone({ type: "sine", startFreq: 700, endFreq: 500, duration: 0.16, peak: 0.22 });
+                break;
+            case "resume":
+                this._envTone({ type: "sine", startFreq: 500, endFreq: 760, duration: 0.16, peak: 0.22 });
+                break;
+            case "gameOver":
+                this._envTone({ type: "sawtooth", startFreq: 440, endFreq: 220, duration: 0.32, peak: 0.32 });
+                this._envTone({ type: "square", startFreq: 330, endFreq: 165, duration: 0.36, peak: 0.26, delay: 0.18 });
+                this._envTone({ type: "sawtooth", startFreq: 220, endFreq: 80, duration: 0.6, peak: 0.32, delay: 0.36 });
+                this._noiseBurst({ duration: 0.5, filterType: "lowpass", filterFreq: 500, peak: 0.18, delay: 0.2 });
+                break;
+            case "start":
+                var st = [392, 523, 659, 784];
+                for (var k = 0; k < st.length; k++) {
+                    this._envTone({
+                        type: "square",
+                        startFreq: st[k],
+                        endFreq: st[k],
+                        duration: 0.1,
+                        peak: 0.28,
+                        delay: k * 0.05
+                    });
+                }
+                break;
+        }
+    };
+
+    SoundEngine.prototype.startBGM = function () {
+        this._ensureCtx();
+        if (!this.ctx) return;
+        if (this.bgmPlaying) return;
+        this.bgmPlaying = true;
+
+        var melody = [
+            [659, 1], [494, 0.5], [523, 0.5],
+            [587, 1], [523, 0.5], [494, 0.5],
+            [440, 1], [440, 0.5], [523, 0.5],
+            [659, 1], [587, 0.5], [523, 0.5],
+            [494, 1.5], [523, 0.5],
+            [587, 1], [659, 1],
+            [523, 1], [440, 1],
+            [440, 1.5], [0, 0.5],
+
+            [587, 1], [587, 0.5], [698, 0.5],
+            [880, 1], [784, 0.5], [698, 0.5],
+            [659, 1.5], [523, 0.5],
+            [659, 1], [587, 0.5], [523, 0.5],
+            [494, 1], [494, 0.5], [523, 0.5],
+            [587, 1], [659, 1],
+            [523, 1], [440, 1],
+            [440, 2]
+        ];
+
+        var bass = [
+            [220, 2], [147, 2],
+            [165, 2], [220, 2],
+            [174, 2], [196, 2],
+            [165, 2], [220, 2],
+
+            [220, 2], [147, 2],
+            [165, 2], [220, 2],
+            [174, 2], [196, 2],
+            [165, 2], [220, 2]
+        ];
+
+        var bpm = this.bgmBpm || 100;
+        var beat = 60 / bpm;
+
+        var loopDuration = 0;
+        for (var m = 0; m < melody.length; m++) {
+            loopDuration += melody[m][1] * beat;
+        }
+
+        this._bgmMelody = melody;
+        this._bgmBass = bass;
+        this._bgmBeat = beat;
+        this._bgmLoopDuration = loopDuration;
+        this._bgmNextStart = this.ctx.currentTime + 0.1;
+
+        this._scheduleBGMLoop();
+    };
+
+    SoundEngine.prototype._scheduleBGMLoop = function () {
+        if (!this.bgmPlaying || !this.ctx) return;
+        var ctx = this.ctx;
+        var melody = this._bgmMelody;
+        var bass = this._bgmBass;
+        var beat = this._bgmBeat;
+        var loopDuration = this._bgmLoopDuration;
+        var startTime = this._bgmNextStart;
+
+        var t = startTime;
+        for (var i = 0; i < melody.length; i++) {
+            var freq = melody[i][0];
+            var dur = melody[i][1] * beat;
+            if (freq > 0) {
+                this._bgmNote(freq, t, dur * 0.95, "square", 0.18);
+            }
+            t += dur;
+        }
+        var bt = startTime;
+        for (var b = 0; b < bass.length; b++) {
+            var bf = bass[b][0];
+            var bd = bass[b][1] * beat;
+            if (bf > 0) {
+                this._bgmNote(bf, bt, bd * 0.9, "triangle", 0.22);
+            }
+            bt += bd;
+        }
+
+        this._bgmNextStart = startTime + loopDuration;
+
+        var aheadMs = 250;
+        var msUntilNext = (this._bgmNextStart - ctx.currentTime) * 1000 - aheadMs;
+        if (msUntilNext < 30) msUntilNext = 30;
+
+        var self = this;
+        this.bgmTimer = setTimeout(function () {
+            self._scheduleBGMLoop();
+        }, msUntilNext);
+    };
+
+    SoundEngine.prototype._bgmNote = function (freq, absStartTime, duration, type, peak) {
+        if (!this.ctx) return;
+        var ctx = this.ctx;
+        var now = absStartTime;
+        if (now < ctx.currentTime + 0.005) {
+            now = ctx.currentTime + 0.005;
+        }
+        var osc = ctx.createOscillator();
+        var gain = ctx.createGain();
+        osc.type = type;
+        osc.frequency.setValueAtTime(freq, now);
+        var sustainEnd = now + duration * 0.85;
+        var releaseEnd = now + duration;
+        gain.gain.setValueAtTime(0.0001, now);
+        gain.gain.exponentialRampToValueAtTime(peak, now + 0.012);
+        gain.gain.setValueAtTime(peak, sustainEnd);
+        gain.gain.exponentialRampToValueAtTime(0.0001, releaseEnd);
+        osc.connect(gain);
+        gain.connect(this.bgmGain);
+        osc.start(now);
+        osc.stop(releaseEnd + 0.02);
+
+        var self = this;
+        var entry = { osc: osc, gain: gain };
+        this._bgmActiveNotes.push(entry);
+        osc.onended = function () {
+            var idx = self._bgmActiveNotes.indexOf(entry);
+            if (idx !== -1) self._bgmActiveNotes.splice(idx, 1);
+        };
+    };
+
+    SoundEngine.prototype.stopBGM = function () {
+        this.bgmPlaying = false;
+        if (this.bgmTimer) {
+            clearTimeout(this.bgmTimer);
+            this.bgmTimer = null;
+        }
+        if (!this.ctx) {
+            this._bgmActiveNotes = [];
+            return;
+        }
+        var now = this.ctx.currentTime;
+        var notes = this._bgmActiveNotes;
+        this._bgmActiveNotes = [];
+        for (var i = 0; i < notes.length; i++) {
+            var n = notes[i];
+            try {
+                n.gain.gain.cancelScheduledValues(now);
+                n.gain.gain.setTargetAtTime(0, now, 0.005);
+            } catch (e) {}
+            try {
+                n.osc.stop(now + 0.05);
+            } catch (e) {}
+        }
+    };
+
+    SoundEngine.prototype.setBGMBpm = function (bpm) {
+        bpm = Math.max(60, Math.min(180, bpm | 0));
+        if (this.bgmBpm === bpm) return;
+        this.bgmBpm = bpm;
+        if (!this.bgmPlaying) return;
+        var beat = 60 / bpm;
+        this._bgmBeat = beat;
+        var loopDuration = 0;
+        for (var m = 0; m < this._bgmMelody.length; m++) {
+            loopDuration += this._bgmMelody[m][1] * beat;
+        }
+        this._bgmLoopDuration = loopDuration;
+    };
+
+    SoundEngine.prototype.setMuted = function (muted) {
+        this.muted = muted;
+        if (this.masterGain) {
+            this.masterGain.gain.setTargetAtTime(muted ? 0 : 1, this.ctx.currentTime, 0.02);
+        }
+    };
+
+    SoundEngine.prototype.toggleMute = function () {
+        this.setMuted(!this.muted);
+        return this.muted;
+    };
+
+    global.SoundEngine = SoundEngine;
+})(window);

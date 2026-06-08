@@ -26,7 +26,10 @@
                     <span class="mobile-value" id="level">1</span>
                 </div>
             </div>
-            <button id="startBtn" class="btn">开始</button>
+            <div class="mobile-header-actions">
+                <button id="muteBtn" class="mute-btn-mobile" type="button" aria-label="切换静音">🔊</button>
+                <button id="startBtn" class="btn">开始</button>
+            </div>
         </div>
 
         <div class="game-board">
@@ -61,6 +64,7 @@
                 <p>P 暂停/继续</p>
             </div>
             <button id="startBtnD" class="btn">开始游戏</button>
+            <button id="muteBtnD" class="btn btn-mute" type="button">🔊 音效开</button>
         </div>
     </div>
 
@@ -84,6 +88,7 @@
             <button id="restartBtn" class="btn">重新开始</button>
         </div>
     </div>
+    <script src="js/audio.js"></script>
     <script src="js/tetris.js"></script>
 </body>
 </html>

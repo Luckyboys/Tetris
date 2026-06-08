@@ -108,6 +108,8 @@
         this.timer = null;
         this.dropInterval = 800;
 
+        this.sound = (typeof SoundEngine === "function") ? new SoundEngine() : null;
+
         this.shakeOffset = { x: 0, y: 0 };
         this.shakeIntensity = 0;
         this.particles = [];
@@ -206,9 +208,27 @@
             var points = [0, 100, 300, 500, 800];
             this.score += points[cleared] * this.level;
             this.lines += cleared;
+            var prevLevel = this.level;
             this.level = Math.floor(this.lines / 10) + 1;
             this.dropInterval = Math.max(50, 800 - (this.level - 1) * 70);
             this.updateUI();
+
+            if (cleared === 4) {
+                this._sfx("tetris");
+            } else if (cleared === 3) {
+                this._sfx("clear3");
+            } else if (cleared === 2) {
+                this._sfx("clear2");
+            } else {
+                this._sfx("clear1");
+            }
+            if (this.level > prevLevel) {
+                if (this.sound) {
+                    this.sound.setBGMBpm(this._levelToBpm(this.level));
+                }
+                var self = this;
+                setTimeout(function () { self._sfx("levelUp"); }, 400);
+            }
         }
     };
 
@@ -255,20 +275,33 @@
         this.particleAnimId = requestAnimationFrame(animFrame);
     };
 
+    Game.prototype._sfx = function (name) {
+        if (this.sound) this.sound.play(name);
+    };
+
     Game.prototype.moveLeft = function () {
         this.current.x--;
-        if (!this.valid(this.current)) this.current.x++;
+        if (!this.valid(this.current)) {
+            this.current.x++;
+        } else {
+            this._sfx("move");
+        }
     };
 
     Game.prototype.moveRight = function () {
         this.current.x++;
-        if (!this.valid(this.current)) this.current.x--;
+        if (!this.valid(this.current)) {
+            this.current.x--;
+        } else {
+            this._sfx("move");
+        }
     };
 
     Game.prototype.moveDown = function () {
         this.current.y++;
         if (!this.valid(this.current)) {
             this.current.y--;
+            this._sfx("land");
             this.lockPiece();
         }
     };
@@ -288,6 +321,7 @@
                 }
             }
         }
+        this._sfx("rotate");
     };
 
     Game.prototype.hardDrop = function () {
@@ -295,6 +329,7 @@
             this.current.y++;
         }
         this.current.y--;
+        this._sfx("hardDrop");
         this.lockPiece();
     };
 
@@ -545,6 +580,15 @@
         this.updateTimer();
         document.getElementById("startBtn").textContent = "重新开始";
         document.getElementById("startBtnD").textContent = "重新开始";
+        if (this.sound) {
+            this.sound.setBGMBpm(this._levelToBpm(this.level));
+        }
+        this._sfx("start");
+        if (this.sound) this.sound.startBGM();
+    };
+
+    Game.prototype._levelToBpm = function (level) {
+        return Math.min(160, 100 + (level - 1) * 8);
     };
 
     Game.prototype.pauseToggle = function () {
@@ -552,8 +596,12 @@
         this.paused = !this.paused;
         if (this.paused) {
             clearInterval(this.timer);
+            this._sfx("pause");
+            if (this.sound) this.sound.stopBGM();
         } else {
             this.updateTimer();
+            this._sfx("resume");
+            if (this.sound) this.sound.startBGM();
         }
         this.draw();
     };
@@ -561,6 +609,8 @@
     Game.prototype.gameOver = function () {
         this.running = false;
         clearInterval(this.timer);
+        if (this.sound) this.sound.stopBGM();
+        this._sfx("gameOver");
         document.getElementById("finalScore").textContent = this.score;
         document.getElementById("gameOver").classList.remove("hidden");
     };
@@ -679,6 +729,34 @@
     document.getElementById("restartBtn").addEventListener("click", function () {
         game.restart();
     });
+
+    function updateMuteUI(muted) {
+        var labelMobile = muted ? "🔇" : "🔊";
+        var labelDesktop = muted ? "🔇 音效关" : "🔊 音效开";
+        var mob = document.getElementById("muteBtn");
+        var desk = document.getElementById("muteBtnD");
+        if (mob) {
+            mob.textContent = labelMobile;
+            mob.classList.toggle("muted", muted);
+        }
+        if (desk) {
+            desk.textContent = labelDesktop;
+            desk.classList.toggle("muted", muted);
+        }
+    }
+
+    function bindMuteButton(id) {
+        var btn = document.getElementById(id);
+        if (!btn) return;
+        btn.addEventListener("click", function (e) {
+            e.preventDefault();
+            if (!game.sound) return;
+            var muted = game.sound.toggleMute();
+            updateMuteUI(muted);
+        });
+    }
+    bindMuteButton("muteBtn");
+    bindMuteButton("muteBtnD");
 
     game.draw();
 })();
