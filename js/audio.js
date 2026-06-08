@@ -188,6 +188,23 @@
         this._ensureCtx();
         if (!this.ctx) return;
         if (this.bgmPlaying) return;
+
+        var self = this;
+        if (this.ctx.state === "suspended") {
+            var resumePromise = this.ctx.resume();
+            if (resumePromise && typeof resumePromise.then === "function") {
+                resumePromise.then(function () {
+                    if (!self.bgmPlaying) self._startBGMNow();
+                });
+                return;
+            }
+        }
+        this._startBGMNow();
+    };
+
+    SoundEngine.prototype._startBGMNow = function () {
+        if (!this.ctx) return;
+        if (this.bgmPlaying) return;
         this.bgmPlaying = true;
 
         var melody = [
