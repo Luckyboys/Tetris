@@ -17,19 +17,20 @@
 
     var COLORS = [
         null,
-        "#00f0f0",
-        "#f0f000",
-        "#a000f0",
-        "#00f000",
-        "#f00000",
-        "#0000f0",
-        "#f0a000"
+        { fill: "#00e5ff", light: "#80f0ff", dark: "#0091a3", glow: "rgba(0,229,255,0.5)" },
+        { fill: "#ffea00", light: "#fff566", dark: "#b8a800", glow: "rgba(255,234,0,0.5)" },
+        { fill: "#aa00ff", light: "#d066ff", dark: "#7200b3", glow: "rgba(170,0,255,0.5)" },
+        { fill: "#76ff03", light: "#b2ff66", dark: "#4a9900", glow: "rgba(118,255,3,0.5)" },
+        { fill: "#ff1744", light: "#ff6680", dark: "#b3001e", glow: "rgba(255,23,68,0.5)" },
+        { fill: "#2979ff", light: "#80abff", dark: "#0044cc", glow: "rgba(41,121,255,0.5)" },
+        { fill: "#ff9100", light: "#ffb866", dark: "#cc6600", glow: "rgba(255,145,0,0.5)" }
     ];
 
     function Piece(type) {
         this.type = type;
         this.shape = SHAPES[type].map(function (r) { return r.slice(); });
-        this.color = COLORS[type + 1];
+        this.colorObj = COLORS[type + 1];
+        this.color = this.colorObj.fill;
         this.x = Math.floor((COLS - this.shape[0].length) / 2);
         this.y = 0;
     }
@@ -54,6 +55,30 @@
         return r;
     }
 
+    function Particle(x, y, color) {
+        this.x = x;
+        this.y = y;
+        var angle = Math.random() * Math.PI * 2;
+        var speed = 2 + Math.random() * 5;
+        this.vx = Math.cos(angle) * speed;
+        this.vy = Math.sin(angle) * speed - 2;
+        this.color = color;
+        this.life = 0.6 + Math.random() * 0.4;
+        this.maxLife = this.life;
+        this.size = 2 + Math.random() * 4;
+    }
+
+    Particle.prototype.update = function () {
+        this.x += this.vx;
+        this.y += this.vy;
+        this.vy += 0.15;
+        this.life -= 0.02;
+    };
+
+    Particle.prototype.alive = function () {
+        return this.life > 0;
+    };
+
     function Game(boardCanvas, nextCanvas) {
         this.boardCanvas = boardCanvas;
         this.ctx = boardCanvas.getContext("2d");
@@ -76,6 +101,11 @@
         this.paused = false;
         this.timer = null;
         this.dropInterval = 800;
+
+        this.shakeOffset = { x: 0, y: 0 };
+        this.shakeIntensity = 0;
+        this.particles = [];
+        this.particleAnimId = null;
 
         this.initBoard();
         this.bindKeys();
@@ -146,8 +176,18 @@
 
     Game.prototype.clearLines = function () {
         var cleared = 0;
+        var clearedRows = [];
         for (var y = ROWS - 1; y >= 0; y--) {
             if (this.board[y].every(function (c) { return c !== 0; })) {
+                clearedRows.push(y);
+                for (var x = 0; x < COLS; x++) {
+                    var type = this.board[y][x];
+                    var cx = x * CELL + CELL / 2;
+                    var cy = y * CELL + CELL / 2;
+                    for (var i = 0; i < 3; i++) {
+                        this.particles.push(new Particle(cx, cy, COLORS[type].light));
+                    }
+                }
                 this.board.splice(y, 1);
                 this.board.unshift(new Array(COLS).fill(0));
                 cleared++;
@@ -155,6 +195,8 @@
             }
         }
         if (cleared > 0) {
+            this.startParticleAnimation();
+            this.startShake(cleared * 3, 150 + cleared * 80);
             var points = [0, 100, 300, 500, 800];
             this.score += points[cleared] * this.level;
             this.lines += cleared;
@@ -162,6 +204,49 @@
             this.dropInterval = Math.max(50, 800 - (this.level - 1) * 70);
             this.updateUI();
         }
+    };
+
+    Game.prototype.startShake = function (intensity, duration) {
+        this.shakeIntensity = Math.min(intensity, 14);
+        var self = this;
+        var startTime = Date.now();
+        function shakeFrame() {
+            var elapsed = Date.now() - startTime;
+            if (elapsed > duration) {
+                self.shakeIntensity = 0;
+                self.shakeOffset.x = 0;
+                self.shakeOffset.y = 0;
+                self.draw();
+                return;
+            }
+            var decay = 1 - elapsed / duration;
+            var currentIntensity = self.shakeIntensity * decay;
+            self.shakeOffset.x = (Math.random() - 0.5) * currentIntensity * 2;
+            self.shakeOffset.y = (Math.random() - 0.5) * currentIntensity * 2;
+            self.draw();
+            requestAnimationFrame(shakeFrame);
+        }
+        requestAnimationFrame(shakeFrame);
+    };
+
+    Game.prototype.startParticleAnimation = function () {
+        if (this.particleAnimId) return;
+        var self = this;
+        function animFrame() {
+            var alive = false;
+            for (var i = 0; i < self.particles.length; i++) {
+                self.particles[i].update();
+                if (self.particles[i].alive()) alive = true;
+            }
+            self.particles = self.particles.filter(function (p) { return p.alive(); });
+            self.draw();
+            if (alive) {
+                self.particleAnimId = requestAnimationFrame(animFrame);
+            } else {
+                self.particleAnimId = null;
+            }
+        }
+        this.particleAnimId = requestAnimationFrame(animFrame);
     };
 
     Game.prototype.moveLeft = function () {
@@ -193,6 +278,7 @@
                 if (!this.valid(this.current)) {
                     this.current.x--;
                     this.current.shape = old;
+                    return;
                 }
             }
         }
@@ -206,10 +292,69 @@
         this.lockPiece();
     };
 
+    Game.prototype.drawCell = function (ctx, x, y, colorObj, alpha) {
+        var px = x * CELL;
+        var py = y * CELL;
+        var margin = 2;
+        var r = 3;
+
+        ctx.save();
+        if (alpha !== undefined) {
+            ctx.globalAlpha = alpha;
+        }
+
+        ctx.shadowColor = colorObj.glow;
+        ctx.shadowBlur = 6;
+        ctx.fillStyle = colorObj.fill;
+        ctx.beginPath();
+        ctx.moveTo(px + margin + r, py + margin);
+        ctx.lineTo(px + CELL - margin - r, py + margin);
+        ctx.arcTo(px + CELL - margin, py + margin, px + CELL - margin, py + margin + r, r);
+        ctx.lineTo(px + CELL - margin, py + CELL - margin - r);
+        ctx.arcTo(px + CELL - margin, py + CELL - margin, px + CELL - margin - r, py + CELL - margin, r);
+        ctx.lineTo(px + margin + r, py + CELL - margin);
+        ctx.arcTo(px + margin, py + CELL - margin, px + margin, py + CELL - margin - r, r);
+        ctx.lineTo(px + margin, py + margin + r);
+        ctx.arcTo(px + margin, py + margin, px + margin + r, py + margin, r);
+        ctx.closePath();
+        ctx.fill();
+
+        ctx.shadowColor = "transparent";
+        ctx.shadowBlur = 0;
+
+        var hlGrad = ctx.createLinearGradient(px, py, px, py + CELL);
+        hlGrad.addColorStop(0, "rgba(255,255,255,0.28)");
+        hlGrad.addColorStop(0.4, "rgba(255,255,255,0.06)");
+        hlGrad.addColorStop(0.6, "rgba(0,0,0,0.0)");
+        hlGrad.addColorStop(1, "rgba(0,0,0,0.3)");
+        ctx.fillStyle = hlGrad;
+        ctx.fill();
+
+        ctx.fillStyle = "rgba(255,255,255,0.25)";
+        ctx.fillRect(px + margin + 2, py + margin + 1, CELL - margin * 2 - 4, 5);
+
+        ctx.fillStyle = "rgba(255,255,255,0.15)";
+        ctx.fillRect(px + margin + 1, py + margin + 2, 5, CELL - margin * 2 - 4);
+
+        ctx.strokeStyle = "rgba(255,255,255,0.12)";
+        ctx.lineWidth = 1;
+        ctx.stroke();
+
+        ctx.restore();
+    };
+
     Game.prototype.drawBoard = function () {
         var ctx = this.ctx;
-        ctx.fillStyle = "#0f0f1a";
+        var self = this;
+
+        var bgGrad = ctx.createLinearGradient(0, 0, 0, ROWS * CELL);
+        bgGrad.addColorStop(0, "#0a0a1a");
+        bgGrad.addColorStop(1, "#0f1123");
+        ctx.fillStyle = bgGrad;
         ctx.fillRect(0, 0, COLS * CELL, ROWS * CELL);
+
+        ctx.save();
+        ctx.translate(this.shakeOffset.x, this.shakeOffset.y);
 
         for (var y = 0; y < ROWS; y++) {
             for (var x = 0; x < COLS; x++) {
@@ -219,8 +364,10 @@
             }
         }
 
-        ctx.strokeStyle = "#1a1a2e";
+        ctx.strokeStyle = "rgba(80,80,140,0.18)";
         ctx.lineWidth = 0.5;
+        ctx.shadowColor = "rgba(80,80,200,0.15)";
+        ctx.shadowBlur = 2;
         for (var y1 = 0; y1 <= ROWS; y1++) {
             ctx.beginPath();
             ctx.moveTo(0, y1 * CELL);
@@ -233,16 +380,11 @@
             ctx.lineTo(x1 * CELL, ROWS * CELL);
             ctx.stroke();
         }
+        ctx.shadowColor = "transparent";
+        ctx.shadowBlur = 0;
 
         if (this.current) {
             var p = this.current;
-            for (var y2 = 0; y2 < p.shape.length; y2++) {
-                for (var x2 = 0; x2 < p.shape[y2].length; x2++) {
-                    if (p.shape[y2][x2]) {
-                        this.drawCell(ctx, p.x + x2, p.y + y2, p.color);
-                    }
-                }
-            }
 
             var ghost = p.clone();
             while (ghost.y < ROWS) {
@@ -255,37 +397,46 @@
             for (var y3 = 0; y3 < ghost.shape.length; y3++) {
                 for (var x3 = 0; x3 < ghost.shape[y3].length; x3++) {
                     if (ghost.shape[y3][x3]) {
-                        ctx.fillStyle = "rgba(255,255,255,0.08)";
                         var gx = (ghost.x + x3) * CELL;
                         var gy = (ghost.y + y3) * CELL;
-                        ctx.fillRect(gx + 1, gy + 1, CELL - 2, CELL - 2);
+                        ctx.fillStyle = p.colorObj.glow.replace("0.5", "0.12");
+                        ctx.fillRect(gx + 2, gy + 2, CELL - 4, CELL - 4);
+                        ctx.strokeStyle = p.colorObj.glow.replace("0.5", "0.25");
+                        ctx.lineWidth = 1;
+                        ctx.strokeRect(gx + 2, gy + 2, CELL - 4, CELL - 4);
+                    }
+                }
+            }
+
+            for (var y2 = 0; y2 < p.shape.length; y2++) {
+                for (var x2 = 0; x2 < p.shape[y2].length; x2++) {
+                    if (p.shape[y2][x2]) {
+                        this.drawCell(ctx, p.x + x2, p.y + y2, p.colorObj);
                     }
                 }
             }
         }
-    };
 
-    Game.prototype.drawCell = function (ctx, x, y, color) {
-        var px = x * CELL;
-        var py = y * CELL;
-        ctx.fillStyle = color;
-        ctx.fillRect(px + 1, py + 1, CELL - 2, CELL - 2);
-        ctx.fillStyle = "rgba(255,255,255,0.2)";
-        ctx.fillRect(px + 1, py + 1, CELL - 2, 4);
-        ctx.fillRect(px + 1, py + 1, 4, CELL - 2);
-        ctx.fillStyle = "rgba(0,0,0,0.2)";
-        ctx.fillRect(px + 1, py + CELL - 5, CELL - 2, 4);
-        ctx.fillRect(px + CELL - 5, py + 1, 4, CELL - 2);
+        for (var i = 0; i < this.particles.length; i++) {
+            var pt = this.particles[i];
+            var alpha = pt.life / pt.maxLife;
+            ctx.fillStyle = pt.color;
+            ctx.globalAlpha = alpha;
+            ctx.fillRect(pt.x - pt.size / 2, pt.y - pt.size / 2, pt.size, pt.size);
+        }
+        ctx.globalAlpha = 1;
+
+        ctx.restore();
     };
 
     Game.prototype.drawNext = function () {
         var ctx = this.nextCtx;
-        ctx.fillStyle = "#0f0f1a";
+        ctx.fillStyle = "#0a0a1a";
         ctx.fillRect(0, 0, 4 * CELL, 4 * CELL);
 
         if (!this.next) return;
         var shape = this.next.shape;
-        var color = this.next.color;
+        var colorObj = this.next.colorObj;
         var size = shape.length;
         var offsetX = Math.floor((4 - size) / 2);
         var offsetY = Math.floor((4 - size) / 2);
@@ -293,7 +444,7 @@
         for (var y = 0; y < size; y++) {
             for (var x = 0; x < size; x++) {
                 if (shape[y][x]) {
-                    this.drawCell(ctx, offsetX + x, offsetY + y, color);
+                    this.drawCell(ctx, offsetX + x, offsetY + y, colorObj);
                 }
             }
         }
@@ -335,6 +486,9 @@
         this.current = null;
         this.next = null;
         this.bag = [];
+        this.particles = [];
+        this.shakeOffset = { x: 0, y: 0 };
+        this.shakeIntensity = 0;
         this.updateUI();
         this.spawnPiece();
         this.draw();

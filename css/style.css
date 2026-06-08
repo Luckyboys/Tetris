@@ -5,49 +5,55 @@
 }
 
 body {
-    background: #1a1a2e;
+    background: #070b1a;
     display: flex;
     justify-content: center;
     align-items: center;
     min-height: 100vh;
     font-family: 'Courier New', monospace;
-    color: #eee;
+    color: #ccd6f6;
 }
 
 .container {
     display: flex;
-    gap: 24px;
+    gap: 28px;
     align-items: flex-start;
 }
 
 .game-area {
-    border: 3px solid #444;
-    border-radius: 4px;
+    border: 2px solid rgba(120, 140, 220, 0.3);
+    border-radius: 6px;
     line-height: 0;
+    box-shadow: 0 0 20px rgba(80, 100, 200, 0.08), inset 0 0 20px rgba(80, 100, 200, 0.04);
 }
 
 .game-area canvas {
     display: block;
+    border-radius: 4px;
 }
 
 .side-panel {
     display: flex;
     flex-direction: column;
-    gap: 16px;
-    min-width: 180px;
+    gap: 18px;
+    min-width: 185px;
 }
 
 .next-piece {
-    border: 2px solid #444;
-    border-radius: 4px;
-    padding: 12px;
+    border: 1px solid rgba(120, 140, 220, 0.25);
+    border-radius: 6px;
+    padding: 14px;
     text-align: center;
+    background: rgba(20, 25, 50, 0.6);
+    box-shadow: 0 0 12px rgba(80, 100, 200, 0.06);
 }
 
 .next-piece h3 {
-    margin-bottom: 8px;
-    color: #aaa;
-    font-size: 14px;
+    margin-bottom: 10px;
+    color: #6a7ab5;
+    font-size: 13px;
+    letter-spacing: 2px;
+    text-transform: uppercase;
 }
 
 .next-piece canvas {
@@ -56,61 +62,72 @@ body {
 }
 
 .score-panel {
-    border: 2px solid #444;
-    border-radius: 4px;
-    padding: 12px;
+    border: 1px solid rgba(120, 140, 220, 0.25);
+    border-radius: 6px;
+    padding: 14px;
+    background: rgba(20, 25, 50, 0.6);
+    box-shadow: 0 0 12px rgba(80, 100, 200, 0.06);
 }
 
 .score-panel > div {
     display: flex;
     justify-content: space-between;
-    padding: 4px 0;
+    padding: 5px 0;
     font-size: 14px;
 }
 
 .score-panel > div span:first-child {
-    color: #aaa;
+    color: #6a7ab5;
 }
 
 .score-panel > div span:last-child {
-    color: #fff;
+    color: #e2e8ff;
     font-weight: bold;
+    text-shadow: 0 0 8px rgba(180, 200, 255, 0.3);
 }
 
 .controls-info {
-    border: 2px solid #444;
-    border-radius: 4px;
-    padding: 12px;
+    border: 1px solid rgba(120, 140, 220, 0.25);
+    border-radius: 6px;
+    padding: 14px;
+    background: rgba(20, 25, 50, 0.6);
+    box-shadow: 0 0 12px rgba(80, 100, 200, 0.06);
 }
 
 .controls-info h3 {
-    margin-bottom: 8px;
-    color: #aaa;
-    font-size: 14px;
+    margin-bottom: 10px;
+    color: #6a7ab5;
+    font-size: 13px;
     text-align: center;
+    letter-spacing: 2px;
+    text-transform: uppercase;
 }
 
 .controls-info p {
     font-size: 12px;
-    color: #888;
-    padding: 2px 0;
+    color: #5a6596;
+    padding: 3px 0;
 }
 
 .btn {
-    background: #e94560;
+    background: linear-gradient(135deg, #8e2de2, #4a00e0);
     color: #fff;
     border: none;
-    border-radius: 4px;
-    padding: 12px 24px;
-    font-size: 16px;
+    border-radius: 6px;
+    padding: 13px 24px;
+    font-size: 15px;
     cursor: pointer;
     font-family: inherit;
-    transition: background 0.2s;
+    letter-spacing: 1px;
+    transition: all 0.25s ease;
     width: 100%;
+    box-shadow: 0 4px 15px rgba(142, 45, 226, 0.3);
 }
 
 .btn:hover {
-    background: #c73652;
+    background: linear-gradient(135deg, #a040f0, #5a10f0);
+    box-shadow: 0 6px 20px rgba(142, 45, 226, 0.45);
+    transform: translateY(-1px);
 }
 
 .overlay {
@@ -119,11 +136,12 @@ body {
     left: 0;
     width: 100%;
     height: 100%;
-    background: rgba(0, 0, 0, 0.75);
+    background: rgba(5, 8, 20, 0.85);
     display: flex;
     justify-content: center;
     align-items: center;
     z-index: 100;
+    backdrop-filter: blur(4px);
 }
 
 .overlay.hidden {
@@ -131,22 +149,26 @@ body {
 }
 
 .overlay-content {
-    background: #16213e;
-    border: 2px solid #e94560;
-    border-radius: 8px;
-    padding: 32px 48px;
+    background: linear-gradient(135deg, #121834, #1a1040);
+    border: 1px solid rgba(142, 45, 226, 0.4);
+    border-radius: 10px;
+    padding: 36px 52px;
     text-align: center;
+    box-shadow: 0 0 40px rgba(142, 45, 226, 0.2);
 }
 
 .overlay-content h2 {
-    color: #e94560;
-    margin-bottom: 16px;
+    color: #b366ff;
+    margin-bottom: 18px;
     font-size: 28px;
+    text-shadow: 0 0 20px rgba(142, 45, 226, 0.5);
+    letter-spacing: 3px;
 }
 
 .overlay-content p {
-    margin-bottom: 20px;
+    margin-bottom: 22px;
     font-size: 18px;
+    color: #ccd6f6;
 }
 
 .overlay-content .btn {
