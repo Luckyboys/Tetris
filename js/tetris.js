@@ -824,16 +824,15 @@
     });
 
     function updateMuteUI(muted) {
-        var labelMobile = muted ? "🔇" : "🔊";
-        var labelDesktop = muted ? "🔇 音效关" : "🔊 音效开";
+        var label = muted ? "🔇" : "🔊";
         var mob = document.getElementById("muteBtn");
         var desk = document.getElementById("muteBtnD");
         if (mob) {
-            mob.textContent = labelMobile;
+            mob.textContent = label;
             mob.classList.toggle("muted", muted);
         }
         if (desk) {
-            desk.textContent = labelDesktop;
+            desk.textContent = label;
             desk.classList.toggle("muted", muted);
         }
     }
